@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COP Shooting Game - Difficulty Layers Demo</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="header">
+            <h1>COP Shooting Game</h1>
+            <div id="controls-row">
+                <div id="difficulty-controls">
+                    <span>Difficulty:</span>
+                    <button id="btn-easy" class="difficulty-btn">Easy</button>
+                    <button id="btn-normal" class="difficulty-btn active">Normal</button>
+                    <button id="btn-hard" class="difficulty-btn">Hard</button>
+                </div>
+                <div id="tutorial-controls">
+                    <label>
+                        <input type="checkbox" id="tutorial-toggle" checked>
+                        Tutorial Mode
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div id="game-area">
+            <div id="tutorial-message" class="tutorial-message hidden"></div>
+            <canvas id="game-canvas" width="600" height="400"></canvas>
+            <div id="ui-overlay">
+                <div id="score">Score: 0</div>
+                <div id="hp">HP: 100</div>
+                <div id="hint" class="hint">Use ← → to move, SPACE to shoot</div>
+                <div id="layer-status">Layer: Normal</div>
+            </div>
+        </div>
+
+        <div id="footer">
+            <button id="btn-start">Start Game</button>
+            <button id="btn-pause">Pause</button>
+            <div id="console-log"></div>
+        </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
