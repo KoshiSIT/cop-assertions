@@ -3,7 +3,7 @@
  * COP Shooting Game Demo with Implicit Layer Activation
  */
 import Game from './Game.js';
-import { EMA } from './ema/loader.js';
+import { EMA } from '../../../dist/ema/index.js';
 import { difficultySignal, tutorialSignal, EasyModeLayer, HardModeLayer, TutorialLayer } from './layers.js';
 
 // Global state

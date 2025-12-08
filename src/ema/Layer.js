@@ -1,13 +1,12 @@
-const SignalComp = require('./SignalComp');
-const PartialMethodsPool = require('./PartialMethodsPool');
-const OriginalMethodsPool = require('./OriginalMethodsPool');
-
+import SignalComp from './SignalComp.js';
+import PartialMethodsPool from './PartialMethodsPool.js';
+import OriginalMethodsPool from './OriginalMethodsPool.js';
 
 function Layer(originalLayer) {
 
     this._cond = originalLayer.condition === undefined ?
         new SignalComp("false") : typeof (originalLayer.condition) === "string" ?
-            new SignalComp(originalLayer.condition) : originalLayer.condition; //it should be already a signal composition
+            new SignalComp(originalLayer.condition) : originalLayer.condition;
 
     this._enter = originalLayer.enter || function () {};
     this._exit = originalLayer.exit || function () {};
@@ -31,7 +30,7 @@ function Layer(originalLayer) {
         }
     });
 
-    this.cleanCondition = function() { //this method is reused when you re-init the condition
+    this.cleanCondition = function() {
         this._cond = new SignalComp(this._cond.expression);
     };
 
@@ -39,15 +38,14 @@ function Layer(originalLayer) {
 
         PartialMethodsPool.forEachByLayer(this, function (obj, methodName, partialMethodImpl) {
             obj[methodName] = function () {
-                Layer.proceed = function () {      //todo: it currently does not support partial method chain!
-                    return Layer._executeOriginalMethod(obj, methodName, arguments);
+                let instance = this;  // Capture the actual instance
+                Layer.proceed = function () {
+                    return Layer._executeOriginalMethod(instance, methodName, arguments);
                 };
 
                 let args = arguments;
                 let result = function() {
-                    //Comienzo  magia de Nicolas con scope (if)
-                    let res = partialMethodImpl.apply(obj, args);
-                    //final magia de Nicolas con scope
+                    let res = partialMethodImpl.apply(instance, args);  // Use instance, not prototype
                     return res;
                 }();
 
@@ -63,14 +61,15 @@ function Layer(originalLayer) {
         });
     };
 
-    Layer._executeOriginalMethod = function(obj, methodName, args) {
-        let originalMethod = OriginalMethodsPool.get(obj, methodName);
+    Layer._executeOriginalMethod = function(instance, methodName, args) {
+        // Get the original method from the prototype chain
+        let originalMethod = OriginalMethodsPool.get(Object.getPrototypeOf(instance), methodName);
         if (originalMethod === undefined) throw "No original method found";
 
-        return originalMethod.apply(obj, args);
+        return originalMethod.apply(instance, args);
     }
 
-    this.enableCondition = function() { //todo: when a condition is added, Should it check its predicate?
+    this.enableCondition = function() {
         let thiz = this;
         this._cond.on(function (active) {
             if (active !== thiz._active) {
@@ -90,13 +89,11 @@ function Layer(originalLayer) {
         this._cond.addSignal(signal);
     };
 
-    //This may be used only for debugging
     this.isActive = function() {
         return this._active;
     };
 
-    //Enable condition for layer
     this.enableCondition();
 }
 
-module.exports = Layer;
+export default Layer;

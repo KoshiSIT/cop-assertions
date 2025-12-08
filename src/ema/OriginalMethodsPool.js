@@ -1,6 +1,3 @@
-//this class contains all original methods added in EMA
-//this class should not remove original methods (only read pool)
-
 class OriginalMethodsPool {
 
     constructor() {
@@ -12,9 +9,8 @@ class OriginalMethodsPool {
     }
 
     init() {
-        this._originalMethods = []; //object x methodName x originalMethodImpl
+        this._originalMethods = [];
     }
-
 
     add(obj, methodName) {
         let originalMethod = this.get(obj, methodName);
@@ -33,4 +29,4 @@ class OriginalMethodsPool {
     }
 }
 
-module.exports = new OriginalMethodsPool();
+export default new OriginalMethodsPool();

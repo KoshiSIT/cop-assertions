@@ -19,3 +19,4 @@ import matchers from './matchers';
 
 export default matchers;
 export * from './matchers';
+export * from './helpers';

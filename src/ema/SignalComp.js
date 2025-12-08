@@ -1,12 +1,13 @@
-const expInter = require('./ExpressionInterpreter');
-const performance = require('performance-now');
+import expInter from './ExpressionInterpreter.js';
+
+const performance = window.performance || Date;
 
 class SignalComp {
 
     constructor(expression, signals, id) {
         this._expression = expression;
         this._signals = signals ||  [];
-        this._id = id || "_"; //used to emit
+        this._id = id || "_";
 
         this._subscribers = [];
         this._enableSignals();
@@ -40,7 +41,6 @@ class SignalComp {
     }
 
     addSignal(signal) {
-        //if prevents of reentrancy issues (A in A, A in [A], A in B && B in A)
         if (this._isInExpression(signal.id)) {
             this._signals.push(signal);
             this._enableSignal(signal);
@@ -48,12 +48,12 @@ class SignalComp {
     }
 
     _enableSignal(signal) {
-        let thiz = this; // a patch to evaluate a condition with a context
+        let thiz = this;
         signal.on(function () {
             return thiz.evaluate.apply(thiz);
         });
 
-        return this.evaluate(); //evaluate the expression
+        return this.evaluate();
     }
 
     _enableSignals() {
@@ -74,10 +74,10 @@ class SignalComp {
         });
     }
 
-    evaluate() { //this method replaces set value
+    evaluate() {
         let evalContext = this._prepareConditionContext();
         this._value = expInter(this._expression, evalContext);
-        this._timestamp = performance();
+        this._timestamp = performance.now();
 
         if (this._value !== this._lastVal) {
             this._lastVal = this._value;
@@ -92,7 +92,7 @@ class SignalComp {
            return sa.timestamp - sb.timestamp;
         });
 
-        let obj = {}; //object context
+        let obj = {};
         if (this._id !== "_") obj[this._id] = this.value;
         for (let i = 0; i < this._signals.length; ++i) {
             let signal = this._signals[i];
@@ -102,4 +102,4 @@ class SignalComp {
     }
 }
 
-module.exports = SignalComp;
+export default SignalComp;

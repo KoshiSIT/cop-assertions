@@ -1,7 +1,3 @@
-
-//this class contains all partial method added in EMA
-//this class should not remove partial methods (only read pool)
-
 class PartialMethodsPool {
 
     constructor() {
@@ -13,7 +9,7 @@ class PartialMethodsPool {
     }
 
     init() {
-        this._partialMethods = []; // object x methodName x partialMethodImpl x originalLayer
+        this._partialMethods = [];
     }
 
     add(obj, methodName, partialMethodImpl, originalLayer) {
@@ -27,7 +23,7 @@ class PartialMethodsPool {
         });
     }
 
-    forEachByLayer(deployedLayer, fun) { //fun:  obj, methodName, partialMethodImpl, originalLayer
+    forEachByLayer(deployedLayer, fun) {
         let partialMethods = this._get(deployedLayer);
 
         partialMethods.forEach(function (pm) {
@@ -41,4 +37,4 @@ class PartialMethodsPool {
     }
 }
 
-module.exports = new PartialMethodsPool();
+export default new PartialMethodsPool();

@@ -1,10 +1,15 @@
 /** @type {import('jest').Config} */
-module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
-  testMatch: ['**/*.test.ts'],
-  moduleFileExtensions: ['ts', 'js'],
-  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.test.ts'],
-  setupFilesAfterEnv: ['<rootDir>/all.ts'],
+export default {
+  testEnvironment: "jsdom",
+  roots: ["<rootDir>/src", "<rootDir>/examples"],
+  testMatch: ["**/*.test.ts", "**/*.test.js"],
+  moduleFileExtensions: ["ts", "js"],
+  transform: {
+    "^.+\\.ts$": ["ts-jest", { useESM: true }],
+  },
+  extensionsToTreatAsEsm: [".ts"],
+  moduleNameMapper: {
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+  },
+  collectCoverageFrom: ["src/**/*.ts", "!src/**/*.test.ts"],
 };

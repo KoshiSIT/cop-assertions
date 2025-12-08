@@ -1,7 +1,10 @@
+// Browser version - use performance.now() instead of performance-now module
+const performance = window.performance || Date;
+
 class Signal {
 
     constructor(initialValue, id) {
-        this._id = id || "_";
+        this._id = id || "_"; //it means does have an identifier
         this._subcribers = [];
 
         this._lastVal = undefined;
@@ -20,7 +23,7 @@ class Signal {
         return this._timestamp;
     }
 
-    set id(id) {
+    set id(id) { //id to emit
         this._id = id;
     }
 

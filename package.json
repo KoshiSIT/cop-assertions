@@ -3,15 +3,25 @@
   "version": "0.1.0",
   "description": "Custom Jest matchers for testing Context-Oriented Programming (COP) applications",
   "main": "dist/index.js",
-  "types": "types/index.d.ts",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./helpers": {
+      "import": "./dist/helpers/index.js",
+      "types": "./dist/types/helpers/index.d.ts"
+    }
+  },
   "files": [
     "dist",
     "types",
     "all.js"
   ],
   "scripts": {
-    "build": "tsc",
-    "test": "jest",
+    "build": "tsc && cp -r src/ema dist/",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -24,12 +34,14 @@
   ],
   "author": "",
   "license": "MIT",
+  "type": "module",
   "peerDependencies": {
     "jest": ">=27.0.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3"
   }
