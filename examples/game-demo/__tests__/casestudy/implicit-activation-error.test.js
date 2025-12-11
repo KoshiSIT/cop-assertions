@@ -11,7 +11,7 @@ import {
     HardModeLayer 
 } from '../../js/layers.js';  // ← インポート時にTutorialLayerがactive
 
-describe('暗黙的活性化による予期しないエラー', () => {
+describe('暗黙的的活性化による予期しないエラー', () => {
     const mockCanvas = { width: 600, height: 400 };
 
     // TutorialLayerがactiveなので、spawn()の部分メソッドが呼ばれる
