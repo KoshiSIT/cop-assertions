@@ -731,6 +731,300 @@ export function toBeOriginalMethod(received: any): { pass: boolean; message: () 
     };
 }
 
+// Layer 状態の期待値を表す型
+interface LayerStateExpectation {
+    active?: any[];
+    inactive?: any[];
+}
+
+/**
+ * 関数実行前後で Layer の活性化状態が期待通りに遷移することをアサート
+ * 
+ * @example
+ * assertLayerStateTransition(
+ *     { active: [TutorialLayer], inactive: [HardModeLayer] },  // before
+ *     { active: [TutorialLayer, HardModeLayer], inactive: [] },  // after
+ *     () => {
+ *         difficultySignal.value = 'hard';
+ *     }
+ * );
+ */
+export function assertLayerStateTransition(
+    before: LayerStateExpectation,
+    after: LayerStateExpectation,
+    fn: () => void
+): void {
+    const deployedLayers = (EMA as any)._deployedLayers || [];
+    
+    // Layer 名を取得するヘルパー
+    const getLayerName = (layer: any): string => layer?.name || 'unknown';
+    
+    // 1. use.layer() で宣言された Layer を取得
+    const config = getCurrentConfig();
+    const declaredLayers = config?.layers || [];
+    
+    // 2. before/after に指定された Layer が宣言されているか検証
+    const allSpecifiedLayers = [
+        ...(before.active || []),
+        ...(before.inactive || []),
+        ...(after.active || []),
+        ...(after.inactive || []),
+    ];
+    
+    const undeclaredLayers: string[] = [];
+    for (const layer of allSpecifiedLayers) {
+        if (!declaredLayers.includes(layer)) {
+            const name = getLayerName(layer);
+            if (!undeclaredLayers.includes(name)) {
+                undeclaredLayers.push(name);
+            }
+        }
+    }
+    
+    if (undeclaredLayers.length > 0) {
+        throw new Error(
+            `assertLayerStateTransition: The following layers are not declared with use.layer():\n` +
+            undeclaredLayers.map(name => `  - ${name}`).join('\n') +
+            `\n\nDeclared layers: [${declaredLayers.map(getLayerName).join(', ')}]`
+        );
+    }
+    
+    // Layer の活性化状態を取得するヘルパー
+    const isLayerActive = (originalLayer: any): boolean => {
+        const deployed = deployedLayers.find((l: any) => l.__original__ === originalLayer);
+        return deployed ? deployed._active : false;
+    };
+    
+    // 状態を検証するヘルパー
+    const validateState = (
+        expectation: LayerStateExpectation, 
+        phase: 'before' | 'after'
+    ): string[] => {
+        const errors: string[] = [];
+        
+        // active であるべき Layer を検証
+        if (expectation.active) {
+            for (const layer of expectation.active) {
+                if (!isLayerActive(layer)) {
+                    errors.push(`${getLayerName(layer)} should be active ${phase} execution, but was inactive`);
+                }
+            }
+        }
+        
+        // inactive であるべき Layer を検証
+        if (expectation.inactive) {
+            for (const layer of expectation.inactive) {
+                if (isLayerActive(layer)) {
+                    errors.push(`${getLayerName(layer)} should be inactive ${phase} execution, but was active`);
+                }
+            }
+        }
+        
+        return errors;
+    };
+    
+    // 予期しない Layer の変化を検出するヘルパー
+    const detectUnexpectedChanges = (
+        beforeState: Map<any, boolean>,
+        afterExpectation: LayerStateExpectation
+    ): string[] => {
+        const errors: string[] = [];
+        const expectedActive = new Set(afterExpectation.active || []);
+        const expectedInactive = new Set(afterExpectation.inactive || []);
+        
+        for (const [layer, wasBefore] of beforeState) {
+            const originalLayer = layer.__original__;
+            const isNow = layer._active;
+            
+            // 状態が変化した場合
+            if (wasBefore !== isNow) {
+                const isExpected = isNow 
+                    ? expectedActive.has(originalLayer)
+                    : expectedInactive.has(originalLayer);
+                
+                if (!isExpected) {
+                    const change = isNow ? 'activated' : 'deactivated';
+                    errors.push(`${getLayerName(originalLayer)} was unexpectedly ${change}`);
+                }
+            }
+        }
+        
+        return errors;
+    };
+    
+    // 1. 処理前の状態を保存
+    const beforeState = new Map<any, boolean>();
+    for (const layer of deployedLayers) {
+        beforeState.set(layer, layer._active);
+    }
+    
+    // 2. 処理前の状態を検証
+    const beforeErrors = validateState(before, 'before');
+    if (beforeErrors.length > 0) {
+        throw new Error(
+            `Layer state mismatch before execution:\n` +
+            beforeErrors.map(e => `  - ${e}`).join('\n')
+        );
+    }
+    
+    // 3. 処理を実行
+    fn();
+    
+    // 4. 処理後の状態を検証
+    const afterErrors = validateState(after, 'after');
+    if (afterErrors.length > 0) {
+        throw new Error(
+            `Layer state mismatch after execution:\n` +
+            afterErrors.map(e => `  - ${e}`).join('\n')
+        );
+    }
+    
+    // 5. 予期しない Layer の変化を検出
+    const unexpectedErrors = detectUnexpectedChanges(beforeState, after);
+    if (unexpectedErrors.length > 0) {
+        throw new Error(
+            `Unexpected layer state changes:\n` +
+            unexpectedErrors.map(e => `  - ${e}`).join('\n')
+        );
+    }
+}
+
+/**
+ * 複数の層が同じメソッドを refine している場合、
+ * 両方活性化している状態でそのメソッドが呼ばれたらエラーを投げる
+ * 
+ * @example
+ * assertNoConflictingMethodCalled(() => {
+ *     player.update();  // takeDamage が呼ばれたら、複数層が活性化していればエラー
+ * });
+ */
+export function assertNoConflictingMethodCalled(fn: () => void): void {
+    const config = getCurrentConfig();
+    const declaredLayers = config?.layers || [];
+    const deployedLayers = (EMA as any)._deployedLayers || [];
+    const pool = (PartialMethodsPool as any)._partialMethods || [];
+    
+    // Layer 名を取得するヘルパー
+    const getLayerName = (layer: any): string => layer?.name || 'unknown';
+    
+    // 1. 宣言された層の中から、同じ (obj, methodName) を refine している層のグループを探す
+    // Map<string, { obj, methodName, layers: originalLayer[] }>
+    const methodToLayers = new Map<string, { obj: any; methodName: string; layers: any[] }>();
+    
+    for (const pm of pool) {
+        const [obj, methodName, , originalLayer] = pm;
+        
+        // 宣言された層のみ対象
+        if (!declaredLayers.includes(originalLayer)) {
+            continue;
+        }
+        
+        // obj と methodName のキーを作成（オブジェクト参照を含む）
+        const key = `${obj.constructor?.name || 'Object'}#${methodName}`;
+        
+        if (!methodToLayers.has(key)) {
+            methodToLayers.set(key, { obj, methodName, layers: [] });
+        }
+        
+        const entry = methodToLayers.get(key)!;
+        if (!entry.layers.includes(originalLayer)) {
+            entry.layers.push(originalLayer);
+        }
+    }
+    
+    // 2. 複数の層が同じメソッドを refine しているケースのみ抽出
+    const conflictingMethods: Array<{ obj: any; methodName: string; layers: any[] }> = [];
+    for (const entry of methodToLayers.values()) {
+        if (entry.layers.length > 1) {
+            conflictingMethods.push(entry);
+        }
+    }
+    
+    // 競合するメソッドがなければ何もしない
+    if (conflictingMethods.length === 0) {
+        fn();
+        return;
+    }
+    
+    // チェック付きでメソッドをラップするヘルパー
+    const wrapMethodWithCheck = (obj: any, methodName: string, layers: any[]) => {
+        const currentMethod = obj[methodName];
+        
+        obj[methodName] = function(this: any, ...args: any[]) {
+            // 呼び出し時点で、このメソッドを refine している層の中で活性化しているものを探す
+            const activeLayers: any[] = [];
+            
+            for (const layer of layers) {
+                const deployed = deployedLayers.find((l: any) => l.__original__ === layer);
+                if (deployed && deployed._active) {
+                    activeLayers.push(layer);
+                }
+            }
+            
+            // 複数の層が活性化していたらエラー
+            if (activeLayers.length > 1) {
+                const layerNames = activeLayers.map(getLayerName).join(', ');
+                throw new Error(
+                    `Conflicting method call detected:\n` +
+                    `  Method: ${obj.constructor?.name || 'Object'}.${methodName}\n` +
+                    `  Active layers with this method: [${layerNames}]\n` +
+                    `  Multiple layers are refining the same method and are all active.`
+                );
+            }
+            
+            return currentMethod.apply(this, args);
+        };
+    };
+    
+    // 3. 初期状態で競合するメソッドをラップ
+    const originalMethods: Array<{ obj: any; methodName: string; original: any }> = [];
+    
+    for (const { obj, methodName, layers } of conflictingMethods) {
+        originalMethods.push({ obj, methodName, original: obj[methodName] });
+        wrapMethodWithCheck(obj, methodName, layers);
+    }
+    
+    // 4. _installPartialMethod をラップして、途中で層が活性化しても再度チェックを追加
+    const originalInstallMethods: Array<{ layer: any; original: any }> = [];
+    
+    for (const deployedLayer of deployedLayers) {
+        const originalLayer = deployedLayer.__original__;
+        
+        // 宣言された層のみ対象
+        if (!declaredLayers.includes(originalLayer)) {
+            continue;
+        }
+        
+        const originalInstall = deployedLayer._installPartialMethod;
+        originalInstallMethods.push({ layer: deployedLayer, original: originalInstall });
+        
+        deployedLayer._installPartialMethod = function() {
+            // 元のインストール処理を実行
+            originalInstall.call(this);
+            
+            // インストール後、競合メソッドに再度チェックを追加
+            for (const { obj, methodName, layers } of conflictingMethods) {
+                wrapMethodWithCheck(obj, methodName, layers);
+            }
+        };
+    }
+    
+    // 5. fn() 実行
+    try {
+        fn();
+    } finally {
+        // 6. _installPartialMethod を元に戻す
+        for (const { layer, original } of originalInstallMethods) {
+            layer._installPartialMethod = original;
+        }
+        
+        // 7. メソッドを元に戻す
+        for (const { obj, methodName, original } of originalMethods) {
+            obj[methodName] = original;
+        }
+    }
+}
+
 // Jest にマッチャーを登録
 declare global {
     namespace jest {
