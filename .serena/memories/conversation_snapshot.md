@@ -1,118 +1,129 @@
 # 会話スナップショット
 
-最終更新: 2024-12-07
+最終更新: 2024-12-31
 現在のブランチ: main
 
 ## 今日の主要な目的
 
-cop-assertions のカスタムマッチャー（アサーション）の実装
+describeCop.ts のモジュール分割とリファクタリング - 分離したモジュール（core/, matchers/）を使用するように変更
 
 ## 実施した作業
 
-### 実装
+### 1. 状況確認
+- `src/core/` と `src/matchers/` にモジュール分割済み
+- しかし `describeCop.ts` は古いコードが残存、分離モジュールを使用していない
 
-1. ✅ `describeCop` の基本実装（Layer 分離環境）
-2. ✅ `toBePartialMethodOf(Layer)` マッチャー
-   - メソッドがどの Layer の部分メソッドかを判定
-   - 詳細なエラーメッセージ（Status, Layer名）
-3. ✅ `toBeActive()` マッチャー
-   - Layer が活性化しているかを判定
-   - エラーメッセージに活性化条件を表示
-4. ✅ examples/game-demo のテスト作成
+### 2. リファクタリング試行（途中）
 
-### テスト結果
+試行した変更:
+- インポートを分離モジュールから行うよう変更
+- 重複関数の削除（deepSnapshot, compareDeepSnapshots, toBeActive など）
+- EMA config / conflictResolutions の保存・復元追加
+- プール状態の保存・復元追加
+- CallTracker.reset() 追加
 
-16/17 テスト通過。失敗は `tutorialState`（グローバル変数）の問題で、COP ツールの問題ではない。
+**結果**: 232/239 テスト成功まで到達したが、構文エラーで git checkout にて元に戻した
 
-### 主要ファイル
+### 3. 確認した問題点
 
-- `src/helpers/describeCop.ts` - メイン実装
-- `examples/game-demo/__tests__/unit/cop/describeCop.test.js` - テスト
+#### プール復元の問題
+- `PartialMethodsPool` と `OriginalMethodsPool` 内の `obj`（プロトタイプ）への変更が復元されない
+- テスト中に CallTracker がメソッドをラップすると `obj[methodName]` に新しいプロパティが追加される
+- スナップショット比較で差分として検出される
 
-## 意思決定の記録
-
-### マッチャーの構文
-
-**決定**: `expect(enemy.spawn).toBePartialMethodOf(TutorialLayer)`
-**理由**: `expect(Enemy.prototype)` より直感的
-
-**決定**: `expect(HardModeLayer).toBeActive()`
-**理由**: Layer が活性化しているかを確認するシンプルな構文
-
-### エラーメッセージ
-
-**決定**: 必要最低限の情報のみ
-```
-expected HardMode to be active
-  Status: inactive
-  Condition: difficulty === "hard"
-```
-**理由**: Signal の現在値など詳細は不要、ユーザーが自分で確認できる
-
-### グローバル変数（tutorialState）
-
-**決定**: describeCop の責務外
-**理由**: COP の機能（Signal, Layer, 部分メソッド）ではなく、単なる JavaScript のグローバル変数
-
-## 会話の流れ
-
-### 序盤
-- examples のテストコードを `describeCop` で書き直し
-- ビルドエラー（tsconfig.json の declaration 設定）を解消
-
-### 中盤
-- 失敗したテストの原因調査
-- `tutorialState.hasSeenFirstEnemy` がグローバル変数で、テスト間で状態が残る問題を特定
-- `toBePartialMethodOf` マッチャーを実装して、COP の問題ではないことを証明
-
-### 終盤
-- `toBeActive()` マッチャーを実装
-- 活性化条件の typo（"Hard" vs "hard"）を検出できることを確認
-- エラーメッセージは必要最低限に
+#### 解決アプローチ（試行済み）
+1. `poolObjectMethods` でプール内の obj のメソッド状態を保存・復元 → 部分的に成功
+2. `getFullEMASnapshot` でプールを簡略化したスナップショットに変更 → 成功（232 passed）
+3. プールの完全復元を目指す → 構文エラーで中断
 
 ## 未完了のタスク
 
-- [ ] 失敗する「両方の Layer が機能する」テストの対処（削除 or コメントアウト）
-- [ ] README / ドキュメント作成
-- [ ] npm publish 準備
+### 高優先度
+- [ ] describeCop.ts から分離モジュールを使うようリファクタ完了
+- [ ] プール内 obj のメソッド状態の完全復元
+
+### 中優先度
+- [ ] whenActivated / whenDeactivated の実装
+- [ ] toExecuteInOrder の proceed チェーン追跡
+
+### 低優先度
+- [ ] casestudy テストの確認（意図的な失敗）
+
+## 現在のテスト結果
+
+```
+Tests: 2 failed, 199 passed, 201 total
+```
+
+失敗しているのは:
+- casestudy/* (2件) - 意図的な失敗
+
+## アーキテクチャ目標
+
+```
+src/
+├── core/                          # ✅ 分離済み
+│   ├── CopHooks.ts
+│   ├── CallTracker.ts
+│   ├── utils.ts
+│   └── types.ts
+│
+├── matchers/                      # ✅ 分離済み
+│   ├── toBeActive.ts
+│   ├── toBeActiveFor.ts
+│   └── ... (7個)
+│
+└── helpers/
+    └── describeCop.ts             # ⏳ リファクタ中
+        - 分離モジュールをインポートして使用
+        - 重複コードを削除
+        - テストフィクスチャのみ残す
+```
 
 ## 次のアクション
 
-- テストの整理（失敗するテストをどうするか決める）
-- ドキュメント作成
+1. **ステップ1**: describeCop.ts のインポートを整理
+   - core/ からユーティリティをインポート
+   - matchers/ からマッチャーを再エクスポート
+
+2. **ステップ2**: 重複関数を削除
+   - deepSnapshot, compareDeepSnapshots → core/utils.ts を使用
+   - toBeActive, toBePartialMethodOf など → matchers/ を使用
+
+3. **ステップ3**: プール復元の完全実装
+   - poolObjectMethods で obj のメソッド状態を保存
+   - restoreEnvironment で完全復元
 
 ## 技術的メモ
 
-### マッチャーの実装パターン
+### プール復元の課題
 
-```ts
-export function toBeActive(received: any): { pass: boolean; message: () => string } {
-    const deployedLayers = (EMA as any).getLayers((l: any) => 
-        l.__original__ === received
-    );
-    
-    const isActive = deployedLayers[0]?._active;
-    
-    return {
-        pass: isActive,
-        message: () => isActive 
-            ? `expected ${received.name} not to be active...` 
-            : `expected ${received.name} to be active...`,
-    };
+```typescript
+// プール構造
+_partialMethods = [
+    [obj, methodName, partialMethodImpl, originalLayer],
+    [Enemy.prototype, 'takeDamage', fn, HardModeLayer],
+    ...
+]
+
+// 問題: テスト中に obj にプロパティが追加される
+Enemy.prototype.takeDamage = wrappedFunction; // CallTracker がラップ
+
+// 解決: obj のメソッド状態も保存・復元
+poolObjectMethods = [
+    { obj: Enemy.prototype, methodName: 'takeDamage', method: originalFn, existed: true }
+]
+```
+
+### スナップショット比較の改善案
+
+```typescript
+// オプション A: プールを簡略化（現在の回避策）
+partialMethodsPool: {
+    length: pool.length,
+    entries: pool.map(e => ({ objType, methodName }))
 }
+
+// オプション B: obj のメソッド状態を完全復元（目標）
+poolObjectMethods で保存・復元
 ```
-
-### export と登録
-
-```ts
-// export して外部から使えるように
-export { toBePartialMethodOf, toBeActive };
-
-// テストファイルで登録
-import { toBePartialMethodOf, toBeActive } from '...';
-expect.extend({ toBePartialMethodOf, toBeActive });
-```
-
-### tsconfig.json の修正
-
-`declaration: false` に変更（EMA の .js ファイルが declaration emit エラーを起こすため）

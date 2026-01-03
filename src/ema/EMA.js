@@ -15,6 +15,78 @@ class EMA {
     init() {
         this._deployedLayers = [];
         this._signalInterfacePool = [];
+        this._config = {
+            proceedMode: 'original'  // 'original' or 'chain'
+        };
+        this._conflictResolutions = [];  // { obj, methodName, layers[] }
+    }
+
+    /**
+     * EMA の設定を変更
+     * @param {Object} options - 設定オプション
+     * @param {string} options.proceedMode - 'original' (デフォルト) or 'chain'
+     */
+    config(options) {
+        if (options.proceedMode !== undefined) {
+            if (options.proceedMode !== 'original' && options.proceedMode !== 'chain') {
+                throw new Error("proceedMode must be 'original' or 'chain'");
+            }
+            this._config.proceedMode = options.proceedMode;
+        }
+        return this._config;
+    }
+
+    /**
+     * 現在の設定を取得
+     */
+    getConfig() {
+        return { ...this._config };
+    }
+
+    /**
+     * コンフリクト解決を登録
+     * @param {Object} obj - 対象オブジェクト（通常は prototype）
+     * @param {string} methodName - メソッド名
+     * @param {Array} layers - 層の優先順位（左が優先）
+     * @param {Function} [callback] - カスタム動作を定義するコールバック
+     *   callback(partialMethods: Object, originalMethod: Function) => Function
+     *   - partialMethods: { layerName: method } の形式で各層の部分メソッド
+     *   - originalMethod: オリジナルメソッド
+     *   - 戻り値: 新しい動作を定義した関数
+     */
+    resolveConflict(obj, methodName, layers, callback) {
+        // 既存の解決があれば更新
+        const existing = this._conflictResolutions.find(
+            r => r.obj === obj && r.methodName === methodName
+        );
+        
+        if (existing) {
+            existing.layers = layers;
+            existing.callback = callback || null;
+        } else {
+            this._conflictResolutions.push({ 
+                obj, 
+                methodName, 
+                layers,
+                callback: callback || null
+            });
+        }
+    }
+
+    /**
+     * コンフリクト解決を取得
+     */
+    getConflictResolution(obj, methodName) {
+        return this._conflictResolutions.find(
+            r => r.obj === obj && r.methodName === methodName
+        );
+    }
+
+    /**
+     * コンフリクト解決をクリア
+     */
+    clearConflictResolutions() {
+        this._conflictResolutions = [];
     }
 
     deploy(originalLayer) {
@@ -119,4 +191,9 @@ class EMA {
     };
 }
 
-export default new EMA();
+const emaInstance = new EMA();
+
+// Layer に EMA への参照を設定（循環参照を避けるため）
+Layer.setEMA(emaInstance);
+
+export default emaInstance;

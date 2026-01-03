@@ -9,7 +9,7 @@ import {
     describeCop, 
     toBePartialMethodOf, 
     toBeActive,
-    assertLayerStateUnchanged 
+    assertLayerStateUnchanged
 } from '../../../../../dist/helpers/describeCop.js';
 import EMA from '../../../../../dist/ema/EMA.js';
 import Enemy from '../../../js/Enemy.js';

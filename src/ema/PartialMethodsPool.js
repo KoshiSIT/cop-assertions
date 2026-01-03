@@ -23,6 +23,16 @@ class PartialMethodsPool {
         });
     }
 
+    /**
+     * 特定のオブジェクト、メソッド、層に対する部分メソッドを取得
+     */
+    getPartialMethod(obj, methodName, originalLayer) {
+        const found = this._partialMethods.find(function (pm) {
+            return pm[0] === obj && pm[1] === methodName && pm[3] === originalLayer;
+        });
+        return found ? found[2] : null;
+    }
+
     forEachByLayer(deployedLayer, fun) {
         let partialMethods = this._get(deployedLayer);
 
